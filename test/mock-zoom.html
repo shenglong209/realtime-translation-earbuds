@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>Mock Zoom — test page</title></head>
+  <body>
+    <!-- Fake Zoom web meeting: a React-style root that re-renders every
+         second (wiping anything naively injected into its caption area),
+         plus a mic dropdown. The subtitle overlay must live OUTSIDE this
+         root to survive. -->
+    <div id="react-root">
+      <h1>Mock Zoom meeting</h1>
+      <label>Microphone
+        <select id="mic-select">
+          <option value="default">Default microphone</option>
+        </select>
+      </label>
+      <div id="caption-container"></div>
+    </div>
+    <script>
+      // Simulate React re-renders: blow away the caption container's
+      // children every second. A naive subtitle injection dies here.
+      setInterval(() => {
+        document.getElementById('caption-container').innerHTML =
+          '<div class="caption">live captions…</div>';
+      }, 1000);
+      window.__mockZoomReady = true;
+    </script>
+  </body>
+</html>
