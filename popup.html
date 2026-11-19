@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { width: 320px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px; }
+      h1 { font-size: 15px; margin: 0 0 8px; }
+      label { display: block; font-size: 12px; color: #555; margin: 10px 0 4px; }
+      input, select { width: 100%; box-sizing: border-box; padding: 6px; font-size: 13px; }
+      button { width: 100%; padding: 9px; margin-top: 14px; font-size: 14px; cursor: pointer; }
+      #status { font-size: 12px; color: #555; margin-top: 10px; min-height: 16px; }
+      .note { font-size: 11px; color: #888; margin-top: 10px; line-height: 1.4; }
+    </style>
+  </head>
+  <body>
+    <h1>Realtime Translation</h1>
+    <label for="key">OpenAI API key (stored locally only)</label>
+    <input id="key" type="password" placeholder="sk-..." autocomplete="off" />
+    <label for="pair">Language pair</label>
+    <select id="pair">
+      <option value="en-vi" selected>English → Vietnamese</option>
+      <option value="vi-en">Vietnamese → English</option>
+    </select>
+    <label for="duck">Original voice level under translation: <span id="duckVal">20%</span></label>
+    <input id="duck" type="range" min="10" max="40" value="20" />
+    <button id="start">Start translation</button>
+    <button id="stop" disabled>Stop</button>
+    <div id="status"></div>
+    <div class="note">Join the meeting from your browser, not the desktop app. Pick “Virtual Microphone” in the meeting’s own mic dropdown to speak back.</div>
+    <script src="src/popup.js"></script>
+  </body>
+</html>
