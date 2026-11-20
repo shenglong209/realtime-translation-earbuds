@@ -35,7 +35,7 @@ function pcmToAudioBuffer(pcm, sampleRate) {
   return buf;
 }
 
-async function start({ tabId, apiKey, duckLevel }) {
+async function start({ tabId, apiKey, duckLevel, from = 'en', to = 'vi' }) {
   if (running) return;
   running = true;
 
@@ -55,6 +55,8 @@ async function start({ tabId, apiKey, duckLevel }) {
 
   session = new RealtimeSession({
     apiKey,
+    from,
+    to,
     onAudio: (pcm, sampleRate) => {
       if (!pcm) return;
       // 1. Play through the mixer (ducking applies on the original).
@@ -108,4 +110,5 @@ function stop() {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'start') start(msg).catch((e) => chrome.runtime.sendMessage({ type: 'error', message: String(e?.message || e) }));
   if (msg.type === 'stop') stop();
+  if (msg.type === 'duck' && mixer) mixer.setDuckLevel(msg.duckLevel);
 });
