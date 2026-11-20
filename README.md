@@ -2,7 +2,7 @@
 
 **English → Vietnamese, in real time, in Zoom / Teams web meetings — into any Bluetooth earbuds. No software install. No special hardware.**
 
-Zoom and Teams voice translation doesn't support Vietnamese at all. This Chrome extension captures the meeting tab's audio, translates it with OpenAI Realtime, and mixes the translation with the original voice so you hear both — the original ducked to 20% underneath.
+Zoom and Teams voice translation doesn't support Vietnamese at all. This Chrome extension captures the meeting tab's audio, translates it with your choice of provider — OpenAI Realtime or Gemini Live (free AI Studio key, model `gemini-3.8-live`) — and mixes the translation with the original voice so you hear both — the original ducked to 20% underneath.
 
 > Status: **shipping in the open.** The audio pipeline is built and measured. The extension wiring (tab capture → Realtime session → virtual mic → subtitles) is implemented here; the first live-meeting test is the next milestone.
 
@@ -18,7 +18,7 @@ Zoom and Teams voice translation doesn't support Vietnamese at all. This Chrome 
 ## How it works
 
 ```
-Meeting tab audio ──▶ chrome.tabCapture ──▶ OpenAI Realtime Translate
+Meeting tab audio ──▶ chrome.tabCapture ──▶ Provider: OpenAI Realtime / Gemini Live
                                                    │
 Original (EN) ──▶ GainNode (ducks to 20%) ──▶ mix ──▶ your earbuds
 Translation (VI) ──▶ GainNode (100%) ───────▶ mix ──▶ your earbuds
@@ -27,7 +27,7 @@ Transcript ──▶ Shadow DOM subtitles (EN small + VI large)
 ```
 
 - **Latency budget:** first translated chunk < 800 ms feels live; > 2 s and people talk over the translation. Measured in the live test, not assumed.
-- **Cost:** OpenAI GPT-Realtime-Translate, $0.034/min. A few minutes of testing costs cents.
+- **Cost:** OpenAI GPT-Realtime-Translate, $0.034/min. A few minutes of testing costs cents. Gemini Live (model `gemini-3.8-live`, the current default Live model) works with a free Google AI Studio key — pick the provider in the popup; each provider has its own key field.
 - **The hard constraint:** the meeting laptop has **no software-install permission**. Everything here runs as a per-user Chrome extension. No drivers, no VB-CABLE, no desktop app.
 
 ## Repo map
@@ -35,13 +35,14 @@ Transcript ──▶ Shadow DOM subtitles (EN small + VI large)
 ```
 manifest.json            MV3 manifest (Zoom/Teams web hosts, MAIN + ISOLATED worlds)
 src/
-  background.js          Service worker: wires capture → realtime → mix → mic → subtitles
+  background.js          Service worker: wires capture → provider session → mix → mic → subtitles
   tab-capture.js         chrome.tabCapture → MediaStream
   ducking.js             DuckingMixer: two GainNodes + sidechain AnalyserNode
   realtime.js            OpenAI Realtime session (bring your own API key)
+  gemini-live.js         Gemini Live session (same interface as RealtimeSession; free AI Studio key)
   virtual-mic.js         MAIN-world injection: synthetic mic via MediaStreamTrackGenerator
   subtitles.js           Shadow DOM bilingual subtitle overlay
-  popup.js               Popup UI logic
+  popup.js               Popup UI logic (provider selector + per-provider keys)
 popup.html               Start/stop, language pair, API key, duck level
 docs/
   architecture.md        Pipeline, latency budget, cost, limits, test plan
@@ -54,7 +55,7 @@ docs/
 ## Quickstart
 
 1. Load the extension unpacked in Chrome (`chrome://extensions` → Developer mode → Load unpacked → this folder).
-2. Open the popup, paste an OpenAI API key (stored locally via `chrome.storage`, never committed).
+2. Open the popup, pick a provider (OpenAI or Gemini) and paste its API key — OpenAI keys look like `sk-...`, Gemini keys are free from Google AI Studio. Keys are stored locally via `chrome.storage`, never committed; each provider keeps its own key.
 3. Join a Zoom/Teams meeting **from the browser** ("Join from your browser", not the desktop app).
 4. Press Start. Pick **"Virtual Microphone"** in the meeting's own mic dropdown to speak back in Vietnamese.
 
