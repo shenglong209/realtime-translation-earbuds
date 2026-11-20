@@ -57,6 +57,9 @@ const browser = await puppeteer.launch({
     '--autoplay-policy=no-user-gesture-required',
     '--use-fake-ui-for-media-stream',
     '--use-fake-device-for-media-stream',
+    // This VM runs as root; Chrome refuses to start without it.
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
   ],
 });
 
@@ -71,6 +74,12 @@ try {
   // (translation); while the translation speaks the original must duck
   // to 0.20. Same RMS method as docs/measurements.md. ---
   {
+    // Measure RMS averaged over many snapshots: speech is bursty, so one
+    // 42 ms AnalyserNode snapshot can land in a word gap and read ~0
+    // even at full gain. The single-snapshot version of this test was
+    // flaky for exactly that reason (ratio 0.003 on a working mixer —
+    // the gain itself was verified at 0.200); averaging over ~1 s of
+    // speech is the fix, not a weaker assertion.
     const ratio = await page.evaluate(async (en, vi) => {
       const ctx = new AudioContext();
       const enBuf = ctx.createBuffer(1, en.length, 16000);
@@ -92,21 +101,29 @@ try {
       analyser.fftSize = 2048;
       mixer.originalGain.connect(analyser);
       mixer.start();
-      const rms = () => {
-        const b = new Float32Array(analyser.fftSize);
-        analyser.getFloatTimeDomainData(b);
-        return Math.sqrt(b.reduce((s, v) => s + v * v, 0) / b.length);
+      const measureRms = async (durationMs) => {
+        const samples = [];
+        const end = Date.now() + durationMs;
+        while (Date.now() < end) {
+          const b = new Float32Array(analyser.fftSize);
+          analyser.getFloatTimeDomainData(b);
+          samples.push(...b);
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        return Math.sqrt(samples.reduce((s, v) => s + v * v, 0) / samples.length);
       };
       enSrc.start();
-      await new Promise((r) => setTimeout(r, 500));
-      const before = rms();
+      const before = await measureRms(500);
       viSrc.start();
-      await new Promise((r) => setTimeout(r, 1500));
-      const ducked = rms();
+      await new Promise((r) => setTimeout(r, 300)); // let the duck engage
+      const ducked = await measureRms(1200);
       mixer.destroy();
       await ctx.close();
       return ducked / before;
-    }, pcm16ToFloat32(EN_PCM), pcm16ToFloat32(VI_PCM));
+    // Puppeteer serializes evaluate() args as JSON, which drops a
+    // TypedArray's .length (it arrives as {"0":..,"1":..}), so pass
+    // plain arrays — createBuffer(1, undefined, …) would throw 0 frames.
+    }, Array.from(pcm16ToFloat32(EN_PCM)), Array.from(pcm16ToFloat32(VI_PCM)));
     record('ducking-ratio-0.20', Math.abs(ratio - 0.2) < 0.05, { ratio: +ratio.toFixed(3) });
   }
 
