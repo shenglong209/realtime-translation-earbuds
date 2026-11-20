@@ -32,6 +32,9 @@ const LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativ
 const OUTPUT_SAMPLE_RATE = 24000;
 const INPUT_TARGET_RATE = 16000;
 const CONNECT_TIMEOUT_MS = 15000;
+// WebSocket.OPEN is 1. Referenced by number on purpose: unit tests run under
+// Node 20 (CI), which has no global WebSocket — only the browser runtime does.
+const WS_OPEN = 1;
 
 // Pure: build the first (setup) message. Exported for unit tests.
 export function buildSetupMessage({ model, from, to, voice, resumeHandle }) {
@@ -234,7 +237,7 @@ export class GeminiLiveSession {
   }
 
   _sendAudioChunk(base64) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.ws?.readyState === WS_OPEN) {
       this.ws.send(JSON.stringify({
         realtimeInput: { audio: { mimeType: 'audio/pcm;rate=16000', data: base64 } },
       }));
