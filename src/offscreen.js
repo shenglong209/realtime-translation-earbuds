@@ -38,61 +38,68 @@ function pcmToAudioBuffer(pcm, sampleRate) {
 async function start({ tabId, apiKey, duckLevel, from = 'en', to = 'vi' }) {
   if (running) return;
   running = true;
+  try {
+    ctx = new AudioContext();
+    playCtx = ctx;
+    playDest = ctx.createMediaStreamDestination();
 
-  ctx = new AudioContext();
-  playCtx = ctx;
-  playDest = ctx.createMediaStreamDestination();
+    mixer = new DuckingMixer(ctx, { duckLevel });
+    tabStream = await captureTabAudio(tabId);
+    mixer.connectOriginal(tabStream);
+    mixer.connectTranslation(playDest.stream);
+    mixer.start();
 
-  mixer = new DuckingMixer(ctx, { duckLevel });
-  tabStream = await captureTabAudio(tabId);
-  mixer.connectOriginal(tabStream);
-  mixer.connectTranslation(playDest.stream);
-  mixer.start();
+    // The user's real mic goes to the Realtime session (what they say back).
+    // Never the virtual mic itself — that would be a feedback loop.
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-  // The user's real mic goes to the Realtime session (what they say back).
-  // Never the virtual mic itself — that would be a feedback loop.
-  micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    session = new RealtimeSession({
+      apiKey,
+      from,
+      to,
+      onAudio: (pcm, sampleRate) => {
+        if (!pcm) return;
+        // 1. Play through the mixer (ducking applies on the original).
+        const src = ctx.createBufferSource();
+        src.buffer = pcmToAudioBuffer(pcm, sampleRate);
+        src.connect(playDest);
+        src.start();
+        // 2. Forward raw PCM to the page's virtual mic (MAIN world).
+        chrome.runtime.sendMessage({
+          type: 'translation-audio',
+          pcm: pcm.buffer.slice(0),
+        });
+      },
+      onTranscript: ({ original, translation }) => {
+        chrome.runtime.sendMessage({ type: 'subtitle', original, translation });
+      },
+      onError: (e) => chrome.runtime.sendMessage({ type: 'error', message: String(e?.message || e) }),
+    });
+    await session.connect();
 
-  session = new RealtimeSession({
-    apiKey,
-    from,
-    to,
-    onAudio: (pcm, sampleRate) => {
-      if (!pcm) return;
-      // 1. Play through the mixer (ducking applies on the original).
-      const src = ctx.createBufferSource();
-      src.buffer = pcmToAudioBuffer(pcm, sampleRate);
-      src.connect(playDest);
-      src.start();
-      // 2. Forward raw PCM to the page's virtual mic (MAIN world).
-      chrome.runtime.sendMessage({
-        type: 'translation-audio',
-        pcm: pcm.buffer.slice(0),
-      });
-    },
-    onTranscript: ({ original, translation }) => {
-      chrome.runtime.sendMessage({ type: 'subtitle', original, translation });
-    },
-    onError: (e) => chrome.runtime.sendMessage({ type: 'error', message: String(e?.message || e) }),
-  });
-  await session.connect();
-
-  // Stream the tab audio into the session: MediaStream → AudioWorklet would
-  // be ideal; ScriptProcessor is deprecated but universally available, and
-  // this is a prototype path. 16 kHz mono PCM16 chunks.
-  const tabSource = ctx.createMediaStreamSource(tabStream);
-  const processor = ctx.createScriptProcessor(4096, 1, 1);
-  const resample = ctx.createGain();
-  tabSource.connect(processor);
-  processor.connect(resample); // keep the node alive; output discarded
-  processor.onaudioprocess = (e) => {
-    const input = e.inputBuffer.getChannelData(0);
-    const pcm = new Int16Array(input.length);
-    for (let i = 0; i < input.length; i++) {
-      pcm[i] = Math.max(-32768, Math.min(32767, input[i] * 32768));
-    }
-    session.sendAudioPcm16(pcm16ToBase64(pcm));
-  };
+    // Stream the tab audio into the session: MediaStream → AudioWorklet would
+    // be ideal; ScriptProcessor is deprecated but universally available, and
+    // this is a prototype path. 16 kHz mono PCM16 chunks.
+    const tabSource = ctx.createMediaStreamSource(tabStream);
+    const processor = ctx.createScriptProcessor(4096, 1, 1);
+    const resample = ctx.createGain();
+    tabSource.connect(processor);
+    processor.connect(resample); // keep the node alive; output discarded
+    processor.onaudioprocess = (e) => {
+      const input = e.inputBuffer.getChannelData(0);
+      const pcm = new Int16Array(input.length);
+      for (let i = 0; i < input.length; i++) {
+        pcm[i] = Math.max(-32768, Math.min(32767, input[i] * 32768));
+      }
+      session.sendAudioPcm16(pcm16ToBase64(pcm));
+    };
+  } catch (e) {
+    // A failed start must not leave `running` stuck true: the popup would
+    // show Stopped while Start stays a no-op until Stop is pressed.
+    // stop() resets the flag and releases any half-built audio resources.
+    stop();
+    throw e;
+  }
 }
 
 function stop() {
