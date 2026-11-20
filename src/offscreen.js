@@ -1,21 +1,26 @@
 // Offscreen document — the audio engine.
 //
 // MV3 service workers cannot reliably host an AudioContext, so all audio
-// lives here: tab capture → Realtime session → DuckingMixer → earbuds,
+// lives here: tab capture → provider session (OpenAI Realtime /
+// Gemini Live) → DuckingMixer → earbuds,
 // plus PCM forwarding to the page's virtual mic and transcripts to the
 // subtitle overlay.
 //
 // Message protocol (from the service worker):
-//   { type: 'start', streamId, apiKey, duckLevel }
+//   { type: 'start', streamId, provider, apiKey, duckLevel, from, to }
 //   { type: 'stop' }
 // streamId comes from chrome.tabCapture.getMediaStreamId() in the service
 // worker (tabCapture is unavailable in the offscreen document).
+// provider is 'openai' (default) or 'gemini'; the offscreen engine picks
+// the session class by provider — both share the same interface, so the
+// mixer, virtual mic and subtitle plumbing below stay provider-agnostic.
 // Messages out (to the service worker, relayed to the page):
 //   { type: 'translation-audio', pcm: ArrayBuffer }  → MAIN-world virtual mic
 //   { type: 'subtitle', original, translation }      → subtitle overlay
 import { captureTabAudio } from './tab-capture.js';
 import { DuckingMixer } from './ducking.js';
 import { RealtimeSession, pcm16ToBase64 } from './realtime.js';
+import { GeminiLiveSession } from './gemini-live.js';
 
 let ctx = null;
 let mixer = null;
@@ -37,7 +42,7 @@ function pcmToAudioBuffer(pcm, sampleRate) {
   return buf;
 }
 
-async function start({ streamId, apiKey, duckLevel, from = 'en', to = 'vi' }) {
+async function start({ streamId, provider = 'openai', apiKey, duckLevel, from = 'en', to = 'vi' }) {
   if (running) return;
   running = true;
   try {
@@ -51,12 +56,19 @@ async function start({ streamId, apiKey, duckLevel, from = 'en', to = 'vi' }) {
     mixer.connectTranslation(playDest.stream);
     mixer.start();
 
-    // The user's real mic goes to the Realtime session (what they say back).
+    // The user's real mic goes to the session (what they say back).
     // Never the virtual mic itself — that would be a feedback loop.
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    session = new RealtimeSession({
+    // Provider swap: GeminiLiveSession shares RealtimeSession's interface,
+    // so only the class changes — the audio plumbing stays the same.
+    // inputSampleRate is the rate the tab-audio chunks are sent at (the
+    // AudioContext's rate); Gemini downsamples it to 16 kHz internally,
+    // OpenAI ignores the extra option.
+    const SessionClass = provider === 'gemini' ? GeminiLiveSession : RealtimeSession;
+    session = new SessionClass({
       apiKey,
+      inputSampleRate: ctx.sampleRate,
       from,
       to,
       onAudio: (pcm, sampleRate) => {
