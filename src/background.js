@@ -14,8 +14,10 @@ async function ensureOffscreen() {
   if (contexts.length > 0) return;
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_URL,
-    reasons: ['AUDIO_PLAYBACK'],
-    justification: 'Mix translated meeting audio and play it to the user.',
+    // USER_MEDIA is required for getUserMedia in the offscreen document
+    // (tab audio redemption + the real mic); AUDIO_PLAYBACK for playback.
+    reasons: ['AUDIO_PLAYBACK', 'USER_MEDIA'],
+    justification: 'Capture the meeting tab audio and the mic, mix translated meeting audio and play it to the user.',
   });
 }
 
@@ -27,10 +29,25 @@ chrome.runtime.onMessage.addListener(async (msg, sender) => {
       chrome.runtime.sendMessage({ type: 'error', message: 'No active tab to capture.' });
       return;
     }
+    // chrome.tabCapture is unavailable in the offscreen document, so the
+    // stream ID must be obtained here in the service worker (in response
+    // to the popup's Start click) and redeemed by the offscreen document
+    // with getUserMedia. The ID is single-use and expires within seconds.
+    let streamId;
+    try {
+      streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
+    } catch (e) {
+      chrome.runtime.sendMessage({ type: 'error', message: `Could not capture this tab: ${e?.message || e}` });
+      return;
+    }
+    if (!streamId) {
+      chrome.runtime.sendMessage({ type: 'error', message: 'Could not capture this tab: no stream id.' });
+      return;
+    }
     await chrome.storage.local.set({ running: true });
     chrome.runtime.sendMessage({
       type: 'start',
-      tabId: tab.id,
+      streamId,
       provider: msg.provider || 'openai',
       apiKey: msg.apiKey,
       duckLevel: msg.duckLevel,
