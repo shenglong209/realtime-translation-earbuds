@@ -6,8 +6,10 @@
 // subtitle overlay.
 //
 // Message protocol (from the service worker):
-//   { type: 'start', tabId, apiKey, duckLevel }
+//   { type: 'start', streamId, apiKey, duckLevel }
 //   { type: 'stop' }
+// streamId comes from chrome.tabCapture.getMediaStreamId() in the service
+// worker (tabCapture is unavailable in the offscreen document).
 // Messages out (to the service worker, relayed to the page):
 //   { type: 'translation-audio', pcm: ArrayBuffer }  → MAIN-world virtual mic
 //   { type: 'subtitle', original, translation }      → subtitle overlay
@@ -35,7 +37,7 @@ function pcmToAudioBuffer(pcm, sampleRate) {
   return buf;
 }
 
-async function start({ tabId, apiKey, duckLevel, from = 'en', to = 'vi' }) {
+async function start({ streamId, apiKey, duckLevel, from = 'en', to = 'vi' }) {
   if (running) return;
   running = true;
   try {
@@ -44,7 +46,7 @@ async function start({ tabId, apiKey, duckLevel, from = 'en', to = 'vi' }) {
     playDest = ctx.createMediaStreamDestination();
 
     mixer = new DuckingMixer(ctx, { duckLevel });
-    tabStream = await captureTabAudio(tabId);
+    tabStream = await captureTabAudio(streamId);
     mixer.connectOriginal(tabStream);
     mixer.connectTranslation(playDest.stream);
     mixer.start();
