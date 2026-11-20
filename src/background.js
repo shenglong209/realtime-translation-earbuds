@@ -48,6 +48,7 @@ chrome.runtime.onMessage.addListener(async (msg, sender) => {
     chrome.runtime.sendMessage({
       type: 'start',
       streamId,
+      provider: msg.provider || 'openai',
       apiKey: msg.apiKey,
       duckLevel: msg.duckLevel,
       from: msg.from || 'en',
