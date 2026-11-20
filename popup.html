@@ -14,8 +14,14 @@
   </head>
   <body>
     <h1>Realtime Translation</h1>
-    <label for="key">OpenAI API key (stored locally only)</label>
+    <label for="provider">Provider</label>
+    <select id="provider">
+      <option value="openai" selected>OpenAI Realtime</option>
+      <option value="gemini">Gemini Live (free AI Studio key)</option>
+    </select>
+    <label for="key" id="keyLabel">OpenAI API key (stored locally only)</label>
     <input id="key" type="password" placeholder="sk-..." autocomplete="off" />
+    <div class="note" id="keyHint">Get a key at platform.openai.com.</div>
     <label for="pair">Language pair</label>
     <select id="pair">
       <option value="en-vi" selected>English → Vietnamese</option>
