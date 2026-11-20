@@ -23,10 +23,33 @@ chrome.runtime.onMessage.addListener(async (msg, sender) => {
   if (msg.type === 'start') {
     await ensureOffscreen();
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    chrome.runtime.sendMessage({ type: 'start', tabId: tab.id, apiKey: msg.apiKey, duckLevel: msg.duckLevel });
+    if (!tab?.id) {
+      chrome.runtime.sendMessage({ type: 'error', message: 'No active tab to capture.' });
+      return;
+    }
+    await chrome.storage.local.set({ running: true });
+    chrome.runtime.sendMessage({
+      type: 'start',
+      tabId: tab.id,
+      apiKey: msg.apiKey,
+      duckLevel: msg.duckLevel,
+      from: msg.from || 'en',
+      to: msg.to || 'vi',
+    });
   }
   if (msg.type === 'stop') {
+    await chrome.storage.local.set({ running: false });
     chrome.runtime.sendMessage({ type: 'stop' });
+  }
+  // Live duck retune from the popup slider; the mixer clamps nothing —
+  // the popup only offers 10–40% and the default stays 0.20.
+  if (msg.type === 'duck') {
+    chrome.runtime.sendMessage({ type: 'duck', duckLevel: msg.duckLevel });
+  }
+  // An engine error ends the session: clear the running flag so the
+  // popup reopens in the stopped state.
+  if (msg.type === 'error') {
+    await chrome.storage.local.set({ running: false });
   }
   // Relayed from the offscreen document to the meeting tab's content scripts.
   if (msg.type === 'translation-audio' || msg.type === 'subtitle') {
