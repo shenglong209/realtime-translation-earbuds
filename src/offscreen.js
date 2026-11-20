@@ -7,8 +7,10 @@
 // subtitle overlay.
 //
 // Message protocol (from the service worker):
-//   { type: 'start', tabId, provider, apiKey, duckLevel, from, to }
+//   { type: 'start', streamId, provider, apiKey, duckLevel, from, to }
 //   { type: 'stop' }
+// streamId comes from chrome.tabCapture.getMediaStreamId() in the service
+// worker (tabCapture is unavailable in the offscreen document).
 // provider is 'openai' (default) or 'gemini'; the offscreen engine picks
 // the session class by provider — both share the same interface, so the
 // mixer, virtual mic and subtitle plumbing below stay provider-agnostic.
@@ -40,7 +42,7 @@ function pcmToAudioBuffer(pcm, sampleRate) {
   return buf;
 }
 
-async function start({ tabId, provider = 'openai', apiKey, duckLevel, from = 'en', to = 'vi' }) {
+async function start({ streamId, provider = 'openai', apiKey, duckLevel, from = 'en', to = 'vi' }) {
   if (running) return;
   running = true;
   try {
@@ -49,7 +51,7 @@ async function start({ tabId, provider = 'openai', apiKey, duckLevel, from = 'en
     playDest = ctx.createMediaStreamDestination();
 
     mixer = new DuckingMixer(ctx, { duckLevel });
-    tabStream = await captureTabAudio(tabId);
+    tabStream = await captureTabAudio(streamId);
     mixer.connectOriginal(tabStream);
     mixer.connectTranslation(playDest.stream);
     mixer.start();
