@@ -46,6 +46,9 @@ popup.html               Start/stop, language pair, API key, duck level
 docs/
   architecture.md        Pipeline, latency budget, cost, limits, test plan
   measurements.md        The measured ducking numbers
+  live-test-checklist.md Step-by-step live proof in a real meeting
+.github/workflows/
+  test.yml               CI: npm ci → install Chrome → npm test
 ```
 
 ## Quickstart
